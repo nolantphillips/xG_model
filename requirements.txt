@@ -1,0 +1,5 @@
+pandas
+nhl-api-py
+scikit-learn
+xgboost
+lightgbm
