@@ -347,3 +347,110 @@ def shot_scraper(game_ids: list) -> pd.DataFrame:
     ]
     df = pd.DataFrame(rows, columns=header)
     return df
+
+
+def get_skater_stats(df: pd.DataFrame) -> pd.DataFrame:
+
+    client = NHLClient()
+    stats_list = []
+    goalie_stats = []
+    stats_dict = {}
+    goalie_stats_dict = {}
+
+    shooter_ids = df["shooter_id"].tolist()
+    goalie_ids = df["goalie_id"].tolist()
+
+    for id in shooter_ids:
+        if id not in stats_dict.keys():
+            stats = client.stats.player_career_stats(id)
+            try:
+                stats_dict[id] = {
+                    "position": stats["position"],
+                    "hand": stats["shootsCatches"],
+                    "pct": stats["featuredStats"]["regularSeason"]["career"][
+                        "shootingPctg"
+                    ],
+                }
+            except:
+                stats_dict[id] = {
+                    "position": stats["position"],
+                    "hand": stats["shootsCatches"],
+                    "pct": None,
+                }
+
+        position = stats_dict[id]["position"]
+        shooter_hand = stats_dict[id]["hand"]
+        shooting_pct = stats_dict[id]["pct"]
+        stats_list.append((position, shooter_hand, shooting_pct))
+
+    for id in goalie_ids:
+        if id not in goalie_stats_dict.keys():
+            stats = client.stats.player_career_stats(id)
+            try:
+                goalie_stats_dict[id] = {
+                    "hand": stats["shootsCatches"],
+                    "pct": stats["featuredStats"]["regularSeason"]["career"][
+                        "savePctg"
+                    ],
+                }
+            except:
+                goalie_stats_dict[id] = {"hand": stats["shootsCatches"], "pct": None}
+
+        shooter_hand = goalie_stats_dict[id]["hand"]
+        save_pct = goalie_stats_dict[id]["pct"]
+        goalie_stats.append((shooter_hand, save_pct))
+
+    goalie_header = ["glove_hand", "save_pct"]
+    goalie_df = pd.DataFrame(goalie_stats, columns=goalie_header)
+
+    header = ["position", "shooter_hand", "shooting_pct"]
+    stats_df = pd.DataFrame(stats_list, columns=header)
+
+    final_df = pd.concat([df, stats_df, goalie_df], axis=1)
+    return final_df
+
+
+def angle(x_coord, y_coord):
+    x_centered = 89 - x_coord
+    return round(np.degrees(np.arctan(y_coord / x_centered)), 2)
+
+
+def get_processed_data(df: pd.DataFrame) -> pd.DataFrame:
+    df["angle"] = angle(df["x_coord"], df["y_coord"])
+    df["shot_on_glove"] = df["shooter_hand"] + df["glove_hand"]
+    df["home_skaters"] = df["home_skaters"].astype(int)
+    df["away_skaters"] = df["away_skaters"].astype(int)
+    df = df[df["home_skaters"] >= 3]
+    df = df[df["away_skaters"] >= 3]
+    df["situation"] = df.apply(
+        lambda row: (
+            "EV"
+            if row["home_skaters"] == row["away_skaters"]
+            else ("PP" if row["home_skaters"] > row["away_skaters"] else "SH")
+        ),
+        axis=1,
+    )
+
+    df = df.drop(
+        ["game_id", "team_id", "shooter_id", "shooter", "goalie", "goalie_id"], axis=1
+    )
+    df["target"] = np.where(df["shot_class"] == "goal", 1, 0)
+
+    home_mapping = {}
+    home_mapping[0] = "Away"
+    home_mapping[1] = "Home"
+
+    rebound_mapping = {}
+    rebound_mapping[0] = "No rebound"
+    rebound_mapping[1] = "Rebound"
+
+    rush_mapping = {}
+    rush_mapping[0] = "No rush"
+    rush_mapping[1] = "Rush"
+
+    df["home"] = df["home"].replace(home_mapping)
+    df["rebound"] = df["rebound"].replace(rebound_mapping)
+    df["rush"] = df["rush"].replace(rush_mapping)
+
+    df.drop("shot_class", axis=1)
+    return df
