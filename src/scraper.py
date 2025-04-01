@@ -452,5 +452,5 @@ def get_processed_data(df: pd.DataFrame) -> pd.DataFrame:
     df["rebound"] = df["rebound"].replace(rebound_mapping)
     df["rush"] = df["rush"].replace(rush_mapping)
 
-    df.drop("shot_class", axis=1)
+    df = df.drop("shot_class", axis=1)
     return df

@@ -4,3 +4,5 @@ scikit-learn
 xgboost
 lightgbm
 pyarrow
+mlflow
+dotenv
